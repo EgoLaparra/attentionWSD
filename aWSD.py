@@ -1,80 +1,120 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 """
-Created on Fri Nov 18 20:35:41 2016
+Created on Sun Nov 20 12:54:45 2016
 
 @author: egoitz
 """
-
 import sys
-import data
+import pickle
+
 import numpy as np
 from numpy import random
 import theano
-import theano.tensor as T
+from theano import tensor as T
 
-import nn
-import optimizers
-
-sys.path.append('/home/egoitz/Tools/embeddings/kge/SME/')
-
-# PARAMETERS
-dataset_file = sys.argv[1]
+import data
+#import theano_lstm as M
+import theano_cbow as M
+        
+dataset_file = sys.argv[2]
+epochs=1
 sequence_size = 4
-epochs = 1
-
-# HYPERPARAMETERS
 batch_size = 100 # s
-learning_rate = .1
-momentum = .9
-embedding_units = 50 # e
-hidden_units = 200 # h
+rng = random.RandomState(12345)        
+        
+if  (sys.argv[1] == "t"):
+    # LOAD DATA
+    print ('Loading data...')
+    wnkge, wndict = data.load_kge()            
+    dataset = data.load_penn_treebank(wnkge, wndict)
 
-hidden_units = 60 # h
-
-init_sd = .01 # Standard deviation of the normal distribution used for weight initializations
-                                                                                                                                                                         
-# VARIABLES FOR TRACKING TRAINING PROGRESS                                                                                                                             
-show_training_ce_after = 100
-show_validation_ce_after = 1000
+    #(vocab, train_set, test_set, valid_set) = data.load_file(dataset_file, sequence_size)
+    #(vocab, train_set, test_set, valid_set) = data.load_matlab(dataset_file)
+    #(vocab, train_set, test_set, valid_set) = data.load_file_full_seq(dataset_file, sequence_size)
+    #train_set = train_set[:len(train_set)/4]
+    #test_set = test_set[:len(test_set)/4]
+    #valid_set = valid_set[:len(valid_set)/4]
+    vocab_size = len(vocab) # v
+    (train_input, train_target,
+     test_input, test_target,
+     valid_input, valid_target) = data.load_data(train_set, test_set, valid_set, batch_size)
+    (batches, batch_size, words_num) = np.shape(train_input) # b, s, w
     
-# LOAD DATA
-print ('Loading knowledge graph embeddings...')
-wn_kge, wn_dict = data.load_kge()
-print ('Loading data...')
-(vocab, train_set, test_set, valid_set) = data.load_file(dataset_file, sequence_size)
-vocab_size = len(vocab) # v
-(train_input, train_target,
- test_input, test_target,
- valid_input, valid_target) = data.load_data(train_set, test_set, valid_set, batch_size)
-(batches, batch_size, words_num) = np.shape(train_input) # b, s, w
+    x = T.matrix('x',dtype='int64')
+    y = T.vector('y',dtype='int64')
+    model = M.Model(rng, vocab_size, x=x, y=y)
+    
+    # COMPILE NET
+    print ('Compiling...')
+    train = theano.function(
+                        inputs=[x,y],
+                        outputs=[model.top.output,model.ce],
+                        updates=model.updates
+                        )
 
-sparse_matrix = T.eye(vocab_size) # V x V
-n_sparse_matrix = np.eye(vocab_size)
-count = 0
-tiny = np.exp(-30)
-t = theano.shared(np.exp(-30)) # Avoids divide by zero in log
-
-# INITIALIZE WEIGHTS AND BIASES
-x = T.matrix('x',dtype='int64')
-y = T.vector('y',dtype='int64')
-(bs, wn) = T.shape(x)
-s_y = sparse_matrix[y,:]
-
-rng = random.RandomState(12345)
-emb = nn.Embedding(rng, x, vocab_size, embedding_units, batch_size=bs, sequence=True)
-lstm = nn.LSTM(rng, emb.output, embedding_units, hidden_units, batch_size=bs, peephole_output=True)
-top = nn.Dense(rng, lstm.output, hidden_units, vocab_size, activation=T.nnet.softmax, batch_size=bs)
-
-params = emb.params + lstm.params + top.params
-deltas = emb.deltas + lstm.deltas + top.deltas
-
-# LOSS FUNCTION, CROSS-ENTROPY
-ce = T.sum(T.nnet.nnet.categorical_crossentropy((top.output + t), s_y))
-
-# BACK-PROPAGATION, GET GRADIENTS
-paramsGrad = [T.grad(ce, param) for param in params]
-
-# UPDATE WEIGHTS AND BIASES
-optimizer = optimizers.SGD(deltas, params, paramsGrad,batch_size=bs)
-updates = optimizer.updates()
+    test = theano.function(
+                        inputs=[x,y],
+                        outputs=[model.top.output,model.ce]
+                        )
+    
+    
+    # TRAIN.
+    show_training_ce_after = 100
+    show_validation_ce_after = 1000
+    count = 0
+    for e in range(0,epochs):
+        print ('Epoch %d' % (e + 1))
+        batch_ce = 0
+        train_ce = 0
+        for m in range(0, batches):        
+            batch_input = train_input[m] # S x W
+            batch_target = train_target[m] # S
+            (batch_size, words_num) = np.shape(batch_input)
+                
+            os, ce = train(batch_input, batch_target)
+            ce = ce / batch_size
+            count =  count + 1;
+            batch_ce = batch_ce + (ce - batch_ce) / count
+            train_ce = train_ce + (ce - train_ce) / (m + 1)
+            sys.stdout.write('\rBatch %d Train CE %.3f - Average CE %.3f' % (m + 1, batch_ce, train_ce))
+            sys.stdout.flush()
+            if (m + 1) % show_training_ce_after == 0:
+                print ('')
+                count = 0
+                batch_ce = 0
+                            
+            # VALIDATE
+            if (m + 1) % show_validation_ce_after == 0:
+                print ('Running validation ...')
+                valid_size = np.shape(valid_input)[0]
+                os, valid_ce = test(valid_input, valid_target)
+                valid_ce = valid_ce / valid_size
+                print (' Validation CE %.3f' % valid_ce)
+    
+    print ('')
+    print ('Finished Training.')
+    print ('Final Training CE %.3f\n' % train_ce);
+    
+    # EVALUATE ON VALIDATION SET
+    print ('Running final validation ...')
+    valid_size = np.shape(valid_input)[0]
+    os, valid_ce = test(valid_input, valid_target)
+    valid_ce = valid_ce / valid_size
+    print (' Final validation CE %.3f' % valid_ce)
+    
+    # EVALUATE ON TEST SET
+    print ('Running final test ...')
+    test_size = np.shape(test_input)[0]
+    os, test_ce = test(test_input, test_target)
+    test_ce = test_ce / test_size
+    print (' Final test CE %.3f' % test_ce)
+    
+    # SAVE THE MODEL
+    print ('')
+    print ('Saving the model ...')
+    f = open('model.pkl', 'wb')
+    pickle.dump(vocab, f)
+    for param in model.params:
+        pickle.dump(param.get_value(), f)
+    f.close()

@@ -5,11 +5,16 @@ Created on Fri Oct 21 17:46:06 2016
 
 @author: egoitz
 """
+import sys
 import re
-import scipy.io.matlab as mat
+import pickle
+
 import numpy as np
 from numpy.random import shuffle
-import pickle
+
+from nltk.corpus import treebank
+from nltk.stem import WordNetLemmatizer
+wn_lemmatizer = WordNetLemmatizer()
 
 def load_file (file_name, N):
     '''
@@ -81,22 +86,72 @@ def load_data(train_set, test_set, valid_set, M):
     return train_input, train_target, test_input, test_target, valid_input, valid_target
     
 
+def load_penn_treebank(wnkge, wndict):
+    '''
+    Load Penn Treebank Corpus
+    '''
+    dataset = []
+    for fileid in treebank.fileids():
+        for sent in treebank.tagged_sents(fileid):
+            sentence = []
+            words = []
+            target_words = []
+            target_lemmas = []
+            for w in range(0,len(sent)):
+                word = sent[w]
+                words.append(word[0])
+                if re.search(r'(^NN[^P]*$|^VB|^JJ|^RB)',word[1]):
+                    pos = re.sub(r'^NN.*','n',word[1])
+                    pos = re.sub(r'^VB.*','v',pos)
+                    pos = re.sub(r'^JJ.*','a',pos)
+                    pos = re.sub(r'^RB.*','r',pos)
+                    lemma = wn_lemmatizer.lemmatize(word[0],pos=pos) + '_' + pos
+                    if lemma in wndict:
+                        target_words.append(w)
+                        target_lemmas.append(lemma)
+              
+            targets=[]
+            contexts=[]
+            senses=[]
+            for tw in range(0,len(target_words)):
+                t = target_words[tw]
+                context = []
+                for w in range(0,len(words)):
+                    if w == t:
+                        context.append('$TARGET$')
+                    else:
+                        context.append(words[w])         
+                word_senses = []
+                for sense in wndict[target_lemmas[tw]]:
+                    word_senses.append(wnkge[sense])                        
+                targets.append(words[t])
+                contexts.append(context)
+                senses.append(word_senses)
+            sentence.append(targets)
+            sentence.append(contexts)
+            sentence.append(senses)
+            dataset.append(sentence)
+    return dataset
+                
 def load_kge ():
     '''
     Load Knowledge Graph Embeddings
     '''
-    file = open('/home/egoitz/Tools/embeddings/kge/SME/WN/data/WN_synset2idx.pkl', 'rb')
-    s2i = pickle.load(file)
-    file = open('/home/egoitz/Tools/embeddings/kge/SME/WN/data/WN_synset2concept.pkl', 'rb')
-    s2c = pickle.load(file)
-    file = open('/home/egoitz/Tools/embeddings/kge/SME/WN/WN_TransE/best_valid_model.pkl', 'rb') 
-    model = pickle.load(file)
-    kge = zip(*model[0].E.get_value())
+    f = open('/home/egoitz/Tools/embeddings/kge/SME/WN/data/WN_synset2idx.pkl', 'rb')
+    s2i = pickle.load(f)
+    f = open('/home/egoitz/Tools/embeddings/kge/SME/WN/data/WN_synset2concept.pkl', 'rb')
+    s2c = pickle.load(f)
+    f = open('/home/egoitz/Tools/embeddings/kge/SME/WN/WN_TransE/best_valid_model.pkl', 'rb') 
+    m= pickle.load(f)
+    kge = zip(*m[0].E.get_value())
     
     wn_dict = dict()
     for s in s2c:
         c = re.sub(r'_[0-9]+$','',re.sub(r'^__','',s2c[s]))
-        print (s, c)
+        c = re.sub(r'_NN.*','_n',c)
+        c = re.sub(r'_VB.*','_v',c)
+        c = re.sub(r'_JJ.*','_a',c)
+        c = re.sub(r'_RB.*','_r',c)
         if c not in wn_dict:
             wn_dict[c] = list()
         wn_dict[c].append(s)
