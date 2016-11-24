@@ -133,28 +133,56 @@ def load_penn_treebank(wnkge, wndict):
             dataset.append(sentence)
     return dataset
                 
+#def load_kge ():
+#    '''
+#    Load Knowledge Graph Embeddings
+#    '''
+#    f = open('/home/egoitz/Tools/embeddings/kge/SME/WN/data/WN_synset2idx.pkl', 'rb')
+#    s2i = pickle.load(f)
+#    f = open('/home/egoitz/Tools/embeddings/kge/SME/WN/data/WN_synset2concept.pkl', 'rb')
+#    s2c = pickle.load(f)
+#    f = open('/home/egoitz/Tools/embeddings/kge/SME/WN/WN_TransE/best_valid_model.pkl', 'rb') 
+#    m= pickle.load(f)
+#    kge = zip(*m[0].E.get_value())
+#    
+#    wn_dict = dict()
+#    for s in s2c:
+#        c = re.sub(r'_[0-9]+$','',re.sub(r'^__','',s2c[s]))
+#        c = re.sub(r'_NN.*','_n',c)
+#        c = re.sub(r'_VB.*','_v',c)
+#        c = re.sub(r'_JJ.*','_a',c)
+#        c = re.sub(r'_RB.*','_r',c)
+#        if c not in wn_dict:
+#            wn_dict[c] = list()
+#        wn_dict[c].append(s)
+#    
+#    wn_kge = dict()
+#    for s in s2i:
+#        i = s2i[s]
+#        wn_kge[s] = kge[i]
+#        
+#    return wn_kge, wn_dict
+
 def load_kge ():
     '''
     Load Knowledge Graph Embeddings
     '''
-    f = open('/home/egoitz/Tools/embeddings/kge/SME/WN/data/WN_synset2idx.pkl', 'rb')
+    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/WN30_TransE/data/WN_synset2idx.pkl', 'rb')
     s2i = pickle.load(f)
-    f = open('/home/egoitz/Tools/embeddings/kge/SME/WN/data/WN_synset2concept.pkl', 'rb')
-    s2c = pickle.load(f)
-    f = open('/home/egoitz/Tools/embeddings/kge/SME/WN/WN_TransE/best_valid_model.pkl', 'rb') 
+    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/WN30_TransE/WN_TransE/best_valid_model.pkl', 'rb') 
     m= pickle.load(f)
     kge = zip(*m[0].E.get_value())
+
+    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/wn30/wn30.senses', 'r')
     
     wn_dict = dict()
-    for s in s2c:
-        c = re.sub(r'_[0-9]+$','',re.sub(r'^__','',s2c[s]))
-        c = re.sub(r'_NN.*','_n',c)
-        c = re.sub(r'_VB.*','_v',c)
-        c = re.sub(r'_JJ.*','_a',c)
-        c = re.sub(r'_RB.*','_r',c)
+    for line in f:
+        fields = line.rstrip().split()
+        c = fields[0]
         if c not in wn_dict:
             wn_dict[c] = list()
-        wn_dict[c].append(s)
+        for s in fields[1:]:
+            wn_dict[c].append(s)        
     
     wn_kge = dict()
     for s in s2i:
