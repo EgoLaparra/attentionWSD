@@ -15,12 +15,10 @@ import theano
 from theano import tensor as T
 
 import data
-#import theano_lstm as M
-#import theano_cbow as M
 import net as M 
        
 epochs=1
-batch_size = 100 # s
+batch_size = 100
 rng = random.RandomState(12345)        
         
 if  (sys.argv[1] == "t"):
@@ -38,11 +36,11 @@ if  (sys.argv[1] == "t"):
      valid_senses, valid_indexes) = data.load_data(valid_set)
     (test_targets, test_contexts,
      test_senses, test_indexes) = data.load_data(test_set)
-
-    x_targets = T.matrix('x',dtype='int64')
-    x_contexts = T.matrix('x',dtype='int64')
-    x_senses = T.matrix('x',dtype='float64')
-    x_indexes = T.matrix('x',dtype='int64')
+    
+    x_targets = T.vector('x_targets',dtype='int64')
+    x_contexts = T.matrix('x_contexts',dtype='int64')
+    x_senses = T.tensor3('x_senses',dtype='float64')
+    x_indexes = T.matrix('x_indexes',dtype='int64')
     model = M.Model(rng, vocab_size, lemma_inv_size, batch_size,
                     targets=x_targets, contexts=x_contexts,
                     senses=x_senses, case_indexes=x_indexes)
@@ -73,8 +71,8 @@ if  (sys.argv[1] == "t"):
             batch_targets = train_targets[b]
             batch_contexts = train_contexts[b]
             batch_senses = train_senses[b]
-            batch_indexes = train_indexes[b]
-
+            batch_indexes = train_indexes[b]            
+            
             #(batch_size, words_num) = np.shape(batch_input)
                 
             out, loss = train(batch_targets, batch_contexts, batch_senses, batch_indexes)
