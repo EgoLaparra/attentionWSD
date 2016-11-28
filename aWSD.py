@@ -6,6 +6,7 @@ Created on Sun Nov 20 12:54:45 2016
 @author: egoitz
 """
 import sys
+sys.path.append('/home/egoitz/Tools/embeddings/kge/SME/')
 import pickle
 
 import numpy as np
@@ -15,11 +16,10 @@ from theano import tensor as T
 
 import data
 #import theano_lstm as M
-import theano_cbow as M
-        
-dataset_file = sys.argv[2]
+#import theano_cbow as M
+import net as M 
+       
 epochs=1
-sequence_size = 4
 batch_size = 100 # s
 rng = random.RandomState(12345)        
         
@@ -27,94 +27,100 @@ if  (sys.argv[1] == "t"):
     # LOAD DATA
     print ('Loading data...')
     wnkge, wndict = data.load_kge()            
-    dataset = data.load_penn_treebank(wnkge, wndict)
+    vocab, lemma_inv, dataset = data.load_penn_treebank(wnkge, wndict)
+    vocab_size = len(vocab)
+    lemma_inv_size = len(lemma_inv)    
+    train_set, valid_set, test_set = data.load_sets(dataset)
+    (train_targets, train_contexts,
+     train_senses, train_indexes) = data.load_data(train_set, batch_size)
+    batches = len(train_targets)
+    (valid_targets, valid_contexts,
+     valid_senses, valid_indexes) = data.load_data(valid_set)
+    (test_targets, test_contexts,
+     test_senses, test_indexes) = data.load_data(test_set)
 
-    #(vocab, train_set, test_set, valid_set) = data.load_file(dataset_file, sequence_size)
-    #(vocab, train_set, test_set, valid_set) = data.load_matlab(dataset_file)
-    #(vocab, train_set, test_set, valid_set) = data.load_file_full_seq(dataset_file, sequence_size)
-    #train_set = train_set[:len(train_set)/4]
-    #test_set = test_set[:len(test_set)/4]
-    #valid_set = valid_set[:len(valid_set)/4]
-    vocab_size = len(vocab) # v
-    (train_input, train_target,
-     test_input, test_target,
-     valid_input, valid_target) = data.load_data(train_set, test_set, valid_set, batch_size)
-    (batches, batch_size, words_num) = np.shape(train_input) # b, s, w
-    
-    x = T.matrix('x',dtype='int64')
-    y = T.vector('y',dtype='int64')
-    model = M.Model(rng, vocab_size, x=x, y=y)
+    x_targets = T.matrix('x',dtype='int64')
+    x_contexts = T.matrix('x',dtype='int64')
+    x_senses = T.matrix('x',dtype='float64')
+    x_indexes = T.matrix('x',dtype='int64')
+    model = M.Model(rng, vocab_size, lemma_inv_size, batch_size,
+                    targets=x_targets, contexts=x_contexts,
+                    senses=x_senses, case_indexes=x_indexes)
     
     # COMPILE NET
     print ('Compiling...')
     train = theano.function(
-                        inputs=[x,y],
-                        outputs=[model.top.output,model.ce],
+                        inputs=[x_targets, x_contexts, x_senses, x_indexes],
+                        outputs=[model.top.output,model.loss],
                         updates=model.updates
                         )
 
     test = theano.function(
-                        inputs=[x,y],
-                        outputs=[model.top.output,model.ce]
+                        inputs=[x_targets, x_contexts, x_senses, x_indexes],
+                        outputs=[model.top.output,model.loss]
                         )
     
     
     # TRAIN.
-    show_training_ce_after = 100
-    show_validation_ce_after = 1000
+    show_training_loss_after = 100
+    show_validation_loss_after = 1000
     count = 0
     for e in range(0,epochs):
         print ('Epoch %d' % (e + 1))
-        batch_ce = 0
-        train_ce = 0
-        for m in range(0, batches):        
-            batch_input = train_input[m] # S x W
-            batch_target = train_target[m] # S
-            (batch_size, words_num) = np.shape(batch_input)
+        batch_loss = 0
+        train_loss = 0
+        for b in range(0, batches):        
+            batch_targets = train_targets[b]
+            batch_contexts = train_contexts[b]
+            batch_senses = train_senses[b]
+            batch_indexes = train_indexes[b]
+
+            #(batch_size, words_num) = np.shape(batch_input)
                 
-            os, ce = train(batch_input, batch_target)
-            ce = ce / batch_size
+            out, loss = train(batch_targets, batch_contexts, batch_senses, batch_indexes)
+            loss = loss / batch_size
             count =  count + 1;
-            batch_ce = batch_ce + (ce - batch_ce) / count
-            train_ce = train_ce + (ce - train_ce) / (m + 1)
-            sys.stdout.write('\rBatch %d Train CE %.3f - Average CE %.3f' % (m + 1, batch_ce, train_ce))
+            batch_loss = batch_loss + (loss - batch_loss) / count
+            train_loss = train_loss + (loss - train_loss) / (b + 1)
+            sys.stdout.write('\rBatch %d Train COSINE %.3f - Average COSINE %.3f' % (b + 1, batch_loss, train_loss))
             sys.stdout.flush()
-            if (m + 1) % show_training_ce_after == 0:
+            if (b + 1) % show_training_loss_after == 0:
                 print ('')
                 count = 0
                 batch_ce = 0
                             
             # VALIDATE
-            if (m + 1) % show_validation_ce_after == 0:
+            if (b + 1) % show_validation_loss_after == 0:
                 print ('Running validation ...')
-                valid_size = np.shape(valid_input)[0]
-                os, valid_ce = test(valid_input, valid_target)
-                valid_ce = valid_ce / valid_size
-                print (' Validation CE %.3f' % valid_ce)
+                valid_size = np.shape(valid_targets)[1]
+                out, valid_loss = test(valid_targets, valid_contexts, valid_senses, valid_indexes)
+                valid_loss = valid_loss / valid_size
+                print (' Validation COSINE %.3f' % valid_loss)
     
     print ('')
     print ('Finished Training.')
-    print ('Final Training CE %.3f\n' % train_ce);
+    print ('Final Training COSINE %.3f\n' % train_loss);
     
     # EVALUATE ON VALIDATION SET
     print ('Running final validation ...')
-    valid_size = np.shape(valid_input)[0]
-    os, valid_ce = test(valid_input, valid_target)
-    valid_ce = valid_ce / valid_size
-    print (' Final validation CE %.3f' % valid_ce)
+    valid_size = np.shape(valid_targets)[1]
+    out, valid_loss = test(valid_targets, valid_contexts, valid_senses, valid_indexes)
+    valid_loss = valid_loss / valid_size
+    print (' Final validation CE %.3f' % valid_loss)
     
     # EVALUATE ON TEST SET
     print ('Running final test ...')
-    test_size = np.shape(test_input)[0]
-    os, test_ce = test(test_input, test_target)
-    test_ce = test_ce / test_size
-    print (' Final test CE %.3f' % test_ce)
+    test_size = np.shape(test_targets)[1]
+    out, test_loss = test(test_targets, test_contexts, test_senses, test_indexes)
+    test_loss = test_loss / test_size
+    print (' Final test CE %.3f' % test_loss)
     
     # SAVE THE MODEL
     print ('')
     print ('Saving the model ...')
     f = open('model.pkl', 'wb')
     pickle.dump(vocab, f)
+    pickle.dump(lemma_inv, f)
     for param in model.params:
         pickle.dump(param.get_value(), f)
     f.close()

@@ -868,7 +868,7 @@ class Attention:
                  
         ## Compute recurrence
         def recurrence(query_t, info_t):
-            aggregation_t = T.dot(info_t, query_t) / T.sqrt(T.sum(T.numpy.multiply(info_t, info_t),axis=1) * T.dot(query_t, query_t))
+            aggregation_t = T.dot(info_t, query_t) / T.sqrt(T.sum(T.numpy.multiply(info_t, info_t),axis=0) * T.dot(query_t, query_t))
             relevance_t = T.nnet.softmax(aggregation_t)
             output_t = T.sum(relevance_t * np.transpose(info_t), axis=1)
             return output_t 
@@ -876,7 +876,7 @@ class Attention:
         output, _ = theano.scan(
                                 fn=recurrence,
                                 sequences=[query, info],
-                                n_steps=query.shape[0]
+                                #n_steps=T.shape(query)[0]
                                 )
         
         self.output = output

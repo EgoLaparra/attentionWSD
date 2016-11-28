@@ -14,20 +14,21 @@ import functions
 
 class Model():
     
-    def __init__(self, rng, vocab_size, bs,
+    def __init__(self, rng, vocab_size, lemma_inv_size, bs,
                 ctx_emb_units=50, tgt_emb_units=100,
-                batches=T.matrices('batches',dtype='int64'),
-                target=T.matrix('target',dtype='int64'),
-                context=T.matrix('context',dtype='int64'),
-                wn=T.matrix('wn',dtype='float64')):
+                targets=T.matrix('targets',dtype='int64'),
+                contexts=T.matrix('contexts',dtype='int64'),
+                senses=T.matrix('senses',dtype='float64'),
+                case_indexes=T.matrix('indexes',dtype='int64')
+                ):
         
 
         # MODEL
-        self.ctx_emb = nn.Embedding(rng, context, vocab_size, ctx_emb_units, sequence=True)
-        self.lstm = nn.LSTM(rng, self.ctx_emb.output, ctx_emb_units, tgt_emb_units, peephole_output=True)
-        self.tgt_emb = nn.Embedding(rng, target, vocab_size, tgt_emb_units, sequence=True)
+        self.ctx_emb = nn.Embedding(rng, contexts, vocab_size, ctx_emb_units, sequence=True)
+        self.lstm = nn.LSTM(rng, self.ctx_emb.output, ctx_emb_units, tgt_emb_units)
+        self.tgt_emb = nn.Embedding(rng, targets, lemma_inv_size, tgt_emb_units)
         self.query = nn.Combine([self.lstm.output, self.tgt_emb.output], op='mean')
-        self.top = nn.Attention(self.query.output, wn)
+        self.top = nn.Attention(self.query.output, senses)
 
         # PARAMETERS TO BE LEARNT
         self.params = self.ctx_emb.params + self.lstm.params + self.tgt_emb.params
@@ -38,7 +39,7 @@ class Model():
             return functions.multi_cosine(output[indexes])
         cosines = theano.scan(fn=sentence_cosine,
                               outputs_info=None,
-                              sequences=[batches],
+                              sequences=[case_indexes],
                               non_sequences=self.top.output)
         self.loss = T.sum(cosines)
 
