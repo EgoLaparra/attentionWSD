@@ -232,6 +232,7 @@ def load_penn_treebank(wnkge, wndict):
 def load_kge ():
     '''
     Load Knowledge Graph Embeddings
+<<<<<<< HEAD
     '''    
     s2c = open('/home/egoitz/Data/GenResources/KGE/SME/wn30/wn30.senses', 'r')
     wn_dict = dict()
@@ -243,6 +244,25 @@ def load_kge ():
                 wn_dict[c] = list()
             wn_dict[c].append(s)
     s2c.close()
+=======
+    '''
+    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/WN30_TransE/data/WN_synset2idx.pkl', 'rb')
+    s2i = pickle.load(f)
+    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/WN30_TransE/WN_TransE/best_valid_model.pkl', 'rb') 
+    m= pickle.load(f)
+    kge = zip(*m[0].E.get_value())
+
+    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/wn30/wn30.senses', 'r')
+    
+    wn_dict = dict()
+    for line in f:
+        fields = line.rstrip().split()
+        c = fields[0]
+        if c not in wn_dict:
+            wn_dict[c] = list()
+        for s in fields[1:]:
+            wn_dict[c].append(s)        
+>>>>>>> 04ae263236fd542ca66c867bb9721d28f56a37c6
     
     f = open('/home/egoitz/Data/GenResources/KGE/SME/WN30_TransE/data/WN_synset2idx.pkl', 'rb')
     s2i = pickle.load(f)
