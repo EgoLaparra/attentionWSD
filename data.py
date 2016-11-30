@@ -285,7 +285,7 @@ def load_kge ():
     '''
     Load Knowledge Graph Embeddings
     '''    
-    s2c = open('/home/egoitz/Data/Resources/embeddings/kge/SME/wn30/wn30.senses', 'r')
+    s2c = open('/home/egoitz/Data/GenResources/KGE/SME/wn30/wn30.senses', 'r')
     wn_dict = dict()
     for line in s2c:
         fields = line.rstrip().split()
@@ -296,9 +296,9 @@ def load_kge ():
             wn_dict[c].append(s)
     s2c.close()
     
-    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/WN30_TransE/data/WN_synset2idx.pkl', 'rb')
+    f = open('/home/egoitz/Data/GenResources/KGE/SME/WN30_TransE/data/WN_synset2idx.pkl', 'rb')
     s2i = pickle.load(f)
-    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/WN30_TransE/WN_TransE/best_valid_model.pkl', 'rb') 
+    f = open('/home/egoitz/Data/GenResources/KGE/SME/WN30_TransE/WN_TransE/best_valid_model.pkl', 'rb') 
     m= pickle.load(f)
     kge = zip(*m[0].E.get_value())    
     wn_kge = dict()

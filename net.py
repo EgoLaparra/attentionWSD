@@ -14,16 +14,17 @@ import functions
 
 class Model():
     
-    def __init__(self, rng, vocab_size, lemma_inv_size, bs,
+    def __init__(self, rng, vocab_size, lemma_inv_size,
                 ctx_emb_units=50, tgt_emb_units=20,
                 targets=None, contexts=None, context_mask=None,
                 senses=None, senses_mask=None, case_indexes=None
                 ):
         
-
+        bs = T.shape(targets)[0]
+        
         # MODEL
         self.ctx_emb = nn.Embedding(rng, contexts, vocab_size, ctx_emb_units, sequence=True) # output: num_words X batch_size x ctx_emb_size
-        self.lstm = nn.LSTM(rng, self.ctx_emb.output, ctx_emb_units, tgt_emb_units, input_mask=context_mask, batch_size=bs) # output: batch_size x tgt_emb_size
+        self.lstm = nn.LSTM(rng, self.ctx_emb.output, ctx_emb_units, tgt_emb_units, input_mask=T.transpose(context_mask), batch_size=bs) # output: batch_size x tgt_emb_size
         self.tgt_emb = nn.Embedding(rng, targets, lemma_inv_size, tgt_emb_units, batch_size=bs) # output: batch_size x tgt_emb_size
         self.query = nn.Combine([self.lstm.output, self.tgt_emb.output], op='mean') # output: batch_size x tgt_emb_size 
         self.top = nn.Attention(self.query.output, senses, info_mask=senses_mask) # output: batch_size x kge_emb_size 

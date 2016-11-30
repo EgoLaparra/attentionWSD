@@ -13,7 +13,6 @@ import numpy as np
 from numpy import random
 import theano
 from theano import tensor as T
-from theano.compile.nanguardmode import NanGuardMode
 
 import data
 import net as M 
@@ -45,20 +44,13 @@ if  (sys.argv[1] == "t"):
     x_senses = T.tensor3('x_senses',dtype='float64')  # batch_size X num_senses X kge_size
     x_senses_mask = T.matrix('x_senses_mask',dtype='int64')  # batch_size X num_senses x kge_size
     x_indexes = T.matrix('x_indexes',dtype='int64')  # num_sentences X 2
-    model = M.Model(rng, vocab_size, lemma_inv_size, batch_size,
+    model = M.Model(rng, vocab_size, lemma_inv_size,
                     targets=x_targets, contexts=x_contexts, context_mask=x_context_mask,
                     senses=x_senses, senses_mask=x_senses_mask, case_indexes=x_indexes)
     
     # COMPILE NET
-    print ('Compiling...')
-#    train = theano.function(
-#                        inputs=[x_targets, x_contexts, x_context_mask, 
-#                                x_senses, x_senses_mask, x_indexes],
-#                        outputs=[model.top.output,model.loss],
-#                        updates=model.updates
-#                        )
-    
-    trainfake = theano.function(
+    print ('Compiling...')   
+    train = theano.function(
                         inputs=[x_targets, x_contexts, x_context_mask, 
                                 x_senses, x_senses_mask, x_indexes],
                         outputs=[model.top.output,model.loss],
@@ -83,12 +75,12 @@ if  (sys.argv[1] == "t"):
         for b in range(0, batches):        
             batch_targets = train_targets[b]
             batch_contexts = train_contexts[b]
-            batch_context_mask = np.transpose(train_context_mask[b])
+            batch_context_mask = train_context_mask[b]
             batch_senses = train_senses[b]
             batch_senses_mask = train_senses_mask[b]
             batch_indexes = train_indexes[b]
 
-            out, loss = trainfake(batch_targets, batch_contexts, batch_context_mask,
+            out, loss = train(batch_targets, batch_contexts, batch_context_mask,
                               batch_senses, batch_senses_mask, batch_indexes)
             
             
@@ -105,6 +97,7 @@ if  (sys.argv[1] == "t"):
                             
             # VALIDATE
             if (b + 1) % show_validation_loss_after == 0:
+                print ('')
                 print ('Running validation ...')
                 valid_size = np.size(valid_targets)
                 out, valid_loss = test(valid_targets, valid_contexts, valid_context_mask,
