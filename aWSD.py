@@ -106,7 +106,7 @@ if  (sys.argv[1] == "t"):
             # VALIDATE
             if (b + 1) % show_validation_loss_after == 0:
                 print ('Running validation ...')
-                valid_size = np.shape(valid_targets)[1]
+                valid_size = np.size(valid_targets)
                 out, valid_loss = test(valid_targets, valid_contexts, valid_context_mask,
                                        valid_senses, valid_senses_mask, valid_indexes)
                 valid_loss = valid_loss / valid_size
@@ -118,7 +118,7 @@ if  (sys.argv[1] == "t"):
     
     # EVALUATE ON VALIDATION SET
     print ('Running final validation ...')
-    valid_size = np.shape(valid_targets)[1]
+    valid_size = np.size(valid_targets)
     out, valid_loss = test(valid_targets, valid_contexts, valid_context_mask,
                            valid_senses, valid_senses_mask, valid_indexes)
     valid_loss = valid_loss / valid_size
@@ -126,7 +126,7 @@ if  (sys.argv[1] == "t"):
     
     # EVALUATE ON TEST SET
     print ('Running final test ...')
-    test_size = np.shape(test_targets)[1]
+    test_size = np.size(test_targets)
     out, test_loss = test(test_targets, test_contexts, test_context_mask,
                           test_senses, test_senses_mask, test_indexes)
     test_loss = test_loss / test_size

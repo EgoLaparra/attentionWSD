@@ -91,9 +91,6 @@ def load_data(set_data, max_context, max_polisemy, batch_size=None):
     '''
     Create target, context and sense sets
     '''
-    if batch_size == None:
-        batch_size = len(set_data)
-
     set_targets = []
     set_contexts = []
     set_context_mask = []
@@ -110,24 +107,35 @@ def load_data(set_data, max_context, max_polisemy, batch_size=None):
     for sent in set_data:
         sent_indexes = []
         for t in range(0, len(sent[0])):
-            batch_targets.append(sent[0][t])
+            if batch_size == None:
+                set_targets.append(sent[0][t])
+            else:
+                batch_targets.append(sent[0][t])
             context = sent[1][t]
             context_mask = list(np.ones(len(context), dtype='int64'))
             for c in range(len(context), max_context):
                 context.append(1)
                 context_mask.append(0)
-            batch_contexts.append(context)
-            batch_context_mask.append(context_mask)
+            if batch_size == None:
+                set_contexts.append(context)
+                set_context_mask.append(context_mask)
+            else:
+                batch_contexts.append(context)
+                batch_context_mask.append(context_mask)
             senses = sent[2][t]
             senses_mask = list(np.ones(len(senses), dtype='int64'))
             for s in range(len(senses), max_polisemy):
                 senses.append(list(np.ones(20, dtype='int64')))
                 senses_mask.append(0)
-            batch_senses.append(senses)
-            batch_senses_mask.append(senses_mask)
+            if batch_size == None:
+                set_senses.append(senses)
+                set_senses_mask.append(senses_mask)
+            else:
+                batch_senses.append(senses)
+                batch_senses_mask.append(senses_mask)
             case_index += 1
             sent_indexes.append(case_index)            
-            if len(batch_targets) == batch_size:
+            if batch_size != None and len(batch_targets) == batch_size:
                 idx = []
                 idx.append(sent_indexes[0])
                 idx.append(sent_indexes[-1] + 1)
@@ -149,10 +157,16 @@ def load_data(set_data, max_context, max_polisemy, batch_size=None):
                 batch_indexes = []
                 case_index = -1
         if len(sent_indexes) > 0 :
-            idx = []
-            idx.append(sent_indexes[0])
-            idx.append(sent_indexes[-1] + 1)
-            batch_indexes.append(idx)
+            if batch_size == None:
+                idx = []
+                idx.append(sent_indexes[0])
+                idx.append(sent_indexes[-1] + 1)
+                set_indexes.append(idx)
+            else:
+                idx = []
+                idx.append(sent_indexes[0])
+                idx.append(sent_indexes[-1] + 1)
+                batch_indexes.append(idx)
 
 
     return set_targets, set_contexts, set_context_mask, set_senses, set_senses_mask, set_indexes
@@ -271,7 +285,7 @@ def load_kge ():
     '''
     Load Knowledge Graph Embeddings
     '''    
-    s2c = open('/home/egoitz/Data/GenResources/KGE/SME/wn30/wn30.senses', 'r')
+    s2c = open('/home/egoitz/Data/Resources/embeddings/kge/SME/wn30/wn30.senses', 'r')
     wn_dict = dict()
     for line in s2c:
         fields = line.rstrip().split()
@@ -282,9 +296,9 @@ def load_kge ():
             wn_dict[c].append(s)
     s2c.close()
     
-    f = open('/home/egoitz/Data/GenResources/KGE/SME/WN30_TransE/data/WN_synset2idx.pkl', 'rb')
+    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/WN30_TransE/data/WN_synset2idx.pkl', 'rb')
     s2i = pickle.load(f)
-    f = open('/home/egoitz/Data/GenResources/KGE/SME/WN30_TransE/WN_TransE/best_valid_model.pkl', 'rb') 
+    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/WN30_TransE/WN_TransE/best_valid_model.pkl', 'rb') 
     m= pickle.load(f)
     kge = zip(*m[0].E.get_value())    
     wn_kge = dict()
