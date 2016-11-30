@@ -17,7 +17,7 @@ class Model():
     def __init__(self, rng, vocab_size, lemma_inv_size,
                 ctx_emb_units=50, tgt_emb_units=20,
                 targets=None, contexts=None, context_mask=None,
-                senses=None, senses_mask=None, case_indexes=None
+                senses=None, senses_mask=None, case_indexes=T.matrix(dtype='int64')
                 ):
         
         bs = T.shape(targets)[0]

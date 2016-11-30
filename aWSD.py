@@ -51,17 +51,17 @@ if  (sys.argv[1] == "t"):
     # COMPILE NET
     print ('Compiling...')   
     train = theano.function(
-                        inputs=[x_targets, x_contexts, x_context_mask, 
-                                x_senses, x_senses_mask, x_indexes],
-                        outputs=[model.top.output,model.loss],
-                        updates=model.updates,
-                        )
+                            inputs=[x_targets, x_contexts, x_context_mask, 
+                                    x_senses, x_senses_mask, x_indexes],
+                            outputs=[model.top.output,model.loss],
+                            updates=model.updates,
+                            )
 
     test = theano.function(
-                        inputs=[x_targets, x_contexts, x_context_mask, 
-                                x_senses, x_senses_mask, x_indexes],
-                        outputs=[model.top.output,model.loss]
-                        )
+                           inputs=[x_targets, x_contexts, x_context_mask, 
+                                   x_senses, x_senses_mask, x_indexes],
+                           outputs=[model.top.output,model.loss]
+                           )
     
     
     # TRAIN.
@@ -134,3 +134,59 @@ if  (sys.argv[1] == "t"):
     for param in model.params:
         pickle.dump(param.get_value(), f)
     f.close()
+elif  (sys.argv[1] == "p"):
+    # LOAD DATA
+    print ('Loading data...')
+    wnkge, wndict = data.load_kge()            
+    vocab, lemma_inv, max_context, max_polisemy, dataset = data.load_penn_treebank(wnkge, wndict)
+    vocab_size = len(vocab)
+    lemma_inv_size = len(lemma_inv)    
+    train_set, valid_set, test_set = data.load_sets(dataset)
+    (train_targets, train_contexts, train_context_mask,
+     train_senses, train_senses_mask, train_indexes) = data.load_data(train_set, max_context,
+                                                                        max_polisemy, batch_size=batch_size)
+    batches = len(train_targets)
+    (valid_targets, valid_contexts, valid_context_mask,
+     valid_senses, valid_senses_mask, valid_indexes) = data.load_data(valid_set, max_context, max_polisemy)
+    (test_targets, test_contexts, test_context_mask,
+     test_senses, test_senses_mask, test_indexes) = data.load_data(test_set, max_context, max_polisemy)
+    
+    # LOAD THE MODEL
+    print ('Loading the model...')
+    f = open('model.pkl', 'rb')
+    vocab = pickle.load(f)
+    vocab_size = len(vocab)
+    lemma_inv = pickle.load(f)
+    lemma_inv_size = len(lemma_inv)
+    x_targets = T.vector('x_targets',dtype='int64') # batch_size
+    x_contexts = T.matrix('x_contexts',dtype='int64')  # batch_size X num_words
+    x_context_mask = T.matrix('x_context_mask',dtype='int64')  # batch_size X num_words
+    x_senses = T.tensor3('x_senses',dtype='float64')  # batch_size X num_senses X kge_size
+    x_senses_mask = T.matrix('x_senses_mask',dtype='int64')  # batch_size X num_senses x kge_size
+    model = M.Model(rng, vocab_size, lemma_inv_size,
+                    targets=x_targets, contexts=x_contexts, context_mask=x_context_mask,
+                    senses=x_senses, senses_mask=x_senses_mask)  
+    for param in model.params:
+        param.set_value(pickle.load(f))    
+    f.close()    
+    
+    # COMPILE NET
+    print ('Compiling...')
+    predict = theano.function(
+                          inputs=[x_targets, x_contexts, x_context_mask, 
+                                  x_senses, x_senses_mask],
+                          outputs=[model.top.output]
+                          )
+    
+    prediction = predict(test_targets, test_contexts, test_context_mask,
+                          test_senses, test_senses_mask)        
+
+    for t in range(0,len(prediction[0])):
+        lemma = lemma_inv[test_targets[t]]
+        senses = np.array(test_senses[t])
+        numerator = np.sum(prediction[0][t] * senses, axis=1)
+        denominator = np.sqrt(np.sum(prediction[0][t]**2) * np.sum(senses**2, axis=1))
+        cosine = numerator/denominator
+        max_sense = np.argmax(cosine)
+        print (lemma + " " + wndict[lemma][max_sense])
+        
