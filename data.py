@@ -87,7 +87,7 @@ wn_lemmatizer = WordNetLemmatizer()
     
 
 
-def load_data(set_data, batch_size=None):
+def load_data(set_data, max_context, max_polisemy, batch_size=None):
     '''
     Create target, context and sense sets
     '''
@@ -96,34 +96,66 @@ def load_data(set_data, batch_size=None):
 
     set_targets = []
     set_contexts = []
+    set_context_mask = []
     set_senses = []
+    set_senses_mask = []
     set_indexes = []
     batch_targets = []
     batch_contexts = []
+    batch_context_mask = []
     batch_senses = []
+    batch_senses_mask = []
     batch_indexes = []
     case_index = -1
     for sent in set_data:
         sent_indexes = []
         for t in range(0, len(sent[0])):
             batch_targets.append(sent[0][t])
-            batch_contexts.append(sent[1][t])
-            batch_senses.append(sent[2][t])
+            context = sent[1][t]
+            context_mask = list(np.ones(len(context), dtype='int64'))
+            for c in range(len(context), max_context):
+                context.append(1)
+                context_mask.append(0)
+            batch_contexts.append(context)
+            batch_context_mask.append(context_mask)
+            senses = sent[2][t]
+            senses_mask = list(np.ones(len(senses), dtype='int64'))
+            for s in range(len(senses), max_polisemy):
+                senses.append(list(np.ones(20, dtype='int64')))
+                senses_mask.append(0)
+            batch_senses.append(senses)
+            batch_senses_mask.append(senses_mask)
             case_index += 1
-            sent_indexes.append(case_index)
-        batch_indexes.append(sent_indexes)
-        if len(batch_indexes) == batch_size:
-            set_targets.append(batch_targets)
-            set_contexts.append(batch_contexts)
-            set_senses.append(batch_senses)
-            set_indexes.append(batch_indexes)
-            batch_targets = []
-            batch_contexts = []
-            batch_senses = []
-            batch_indexes = []
-            case_index = -1
+            sent_indexes.append(case_index)            
+            if len(batch_targets) == batch_size:
+                idx = []
+                idx.append(sent_indexes[0])
+                idx.append(sent_indexes[-1] + 1)
+                batch_indexes.append(idx)
+                sent_indexes = []
+                for i in range(len(batch_indexes), 20):
+                    batch_indexes.append([0,0])
+                set_targets.append(batch_targets)
+                set_contexts.append(batch_contexts)
+                set_context_mask.append(batch_context_mask)
+                set_senses.append(batch_senses)
+                set_senses_mask.append(batch_senses_mask)
+                set_indexes.append(batch_indexes)
+                batch_targets = []
+                batch_contexts = []
+                batch_context_mask = []
+                batch_senses = []
+                batch_senses_mask = []
+                batch_indexes = []
+                case_index = -1
+        if len(sent_indexes) > 0 :
+            idx = []
+            idx.append(sent_indexes[0])
+            idx.append(sent_indexes[-1] + 1)
+            batch_indexes.append(idx)
 
-    return set_targets, set_contexts, set_senses, set_indexes
+
+    return set_targets, set_contexts, set_context_mask, set_senses, set_senses_mask, set_indexes
         
 
 def load_sets(dataset):
@@ -148,8 +180,10 @@ def load_penn_treebank(wnkge, wndict):
     Load Penn Treebank Corpus
     '''
     vocab = []
-    lemma_inv = []
     vocab.append('$TARGET$')
+    lemma_inv = []
+    max_context = 0
+    max_polisemy = 0
     dataset = []
     for fileid in treebank.fileids():
         for sent in treebank.tagged_sents(fileid):
@@ -192,12 +226,16 @@ def load_penn_treebank(wnkge, wndict):
                 targets.append(lemma_inv.index(target_lemmas[tw]))
                 contexts.append(context)
                 senses.append(word_senses)
+                if len(context) > max_context:
+                    max_context = len(context)
+                if len(word_senses) > max_polisemy:
+                    max_polisemy = len(word_senses)
             sentence.append(targets)
             sentence.append(contexts)
             sentence.append(senses)
             dataset.append(sentence)
     
-    return vocab, lemma_inv, dataset   
+    return vocab, lemma_inv, max_context, max_polisemy, dataset   
                 
 #def load_kge ():
 #    '''
@@ -233,7 +271,7 @@ def load_kge ():
     '''
     Load Knowledge Graph Embeddings
     '''    
-    s2c = open('/home/egoitz/Data/Resources/embeddings/kge/SME/wn30/wn30.senses', 'r')
+    s2c = open('/home/egoitz/Data/GenResources/KGE/SME/wn30/wn30.senses', 'r')
     wn_dict = dict()
     for line in s2c:
         fields = line.rstrip().split()
@@ -244,9 +282,9 @@ def load_kge ():
             wn_dict[c].append(s)
     s2c.close()
     
-    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/WN30_TransE/data/WN_synset2idx.pkl', 'rb')
+    f = open('/home/egoitz/Data/GenResources/KGE/SME/WN30_TransE/data/WN_synset2idx.pkl', 'rb')
     s2i = pickle.load(f)
-    f = open('/home/egoitz/Data/Resources/embeddings/kge/SME/WN30_TransE/WN_TransE/best_valid_model.pkl', 'rb') 
+    f = open('/home/egoitz/Data/GenResources/KGE/SME/WN30_TransE/WN_TransE/best_valid_model.pkl', 'rb') 
     m= pickle.load(f)
     kge = zip(*m[0].E.get_value())    
     wn_kge = dict()

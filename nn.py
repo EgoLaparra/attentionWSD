@@ -429,7 +429,7 @@ class LSTM:
     '''
     Long-Short Term Memory layer
     '''
-    def __init__(self, rng, input, n_in, n_out, 
+    def __init__(self, rng, input, n_in, n_out, input_mask=None,
                  Wi=None, Wf=None, Wc=None, Wo=None,
                  Wti=None, Wtf=None, Wtc=None, Wto=None,
                  Wci=None, Wcf=None, Wco=None, # Peephole weights
@@ -662,7 +662,7 @@ class LSTM:
             self.deltas.append(self.WcoD)
             
         ## Compute recurrence
-        def recurrence(input_t, cell_tm1, hidden_tm1):
+        def recurrence(input_t, mask_t, cell_tm1, hidden_tm1):
             linear_input = T.dot(input_t, self.Wi) + T.dot(hidden_tm1, self.Wti) + self.bi
             if peephole_input:
                 linear_input = linear_input + T.dot(cell_tm1, self.Wci)
@@ -674,16 +674,20 @@ class LSTM:
                 linear_forget = linear_forget + T.dot(cell_tm1, self.Wcf)
             forget_gate_t = inner_activation(linear_forget)
             cell_t = input_gate_t * cell_candidate_t + forget_gate_t * cell_tm1
+            cell_mask_t = T.transpose(T.tile(mask_t, (T.shape(cell_t)[1],1)))
+            cell_t = cell_mask_t * cell_t + (1. - cell_mask_t) * cell_tm1
             linear_output = T.dot(input_t, self.Wo) + T.dot(hidden_tm1, self.Wto) + self.bo
             if peephole_output:
                 linear_output = linear_output + T.dot(cell_t, self.Wco)
             output_gate_t = inner_activation(linear_output)
             hidden_t = output_gate_t * activation(cell_t)
+            hidden_mask_t = T.transpose(T.tile(mask_t, (T.shape(hidden_t)[1],1)))
+            hidden_t = hidden_mask_t * hidden_t + (1. - hidden_mask_t) * hidden_tm1
             return [cell_t, hidden_t]
-            
+    
         [cell, hidden], _ = theano.scan(
                                 fn=recurrence,
-                                sequences=input[::-1] if inverse else input,
+                                sequences=[input[::-1], input_mask[::-1]] if inverse else [input, input_mask],
                                 outputs_info=[T.tile(self.c0,(batch_size, 1)), T.tile(self.h0,(batch_size, 1))],
                                 n_steps=input.shape[0]
                                 )
@@ -863,19 +867,21 @@ class Attention:
     Attention layer
     '''
     
-    def __init__(self, query, info): # HiddenLayer, numpy.random.RandomState, theano.tensor.dmatrix, int,
+    def __init__(self, query, info, info_mask): # HiddenLayer, numpy.random.RandomState, theano.tensor.dmatrix, int,
     
         
-        def recurrence(query_t, info_t):
+        def recurrence(query_t, info_t, info_mask_t):
             aggregation_t = T.dot(info_t, query_t) / T.sqrt(T.sum(info_t * info_t, axis=1) * T.dot(query_t, query_t))
             #aggregation_t = T.dot(info_t, query_t)
             relevance_t = T.nnet.softmax(aggregation_t)
-            output_t = T.sum(relevance_t * T.transpose(info_t), axis=1)
-            return output_t 
+            info_mask_t = T.transpose(T.tile(info_mask_t, (T.shape(info_t)[1],1)))
+            output_t = T.sum(relevance_t * T.transpose(info_mask_t * info_t), axis=1)
+            return output_t
                 
         output, _ = theano.scan(
                                 fn=recurrence,
-                                sequences=[query, info]
+                                sequences=[query, info, info_mask],
+                                outputs_info=None,
                                 )
         
         self.output = output

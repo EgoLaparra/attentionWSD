@@ -28,10 +28,11 @@ def negative_sampling(rng, x, y):
     return -T.sum(y * (T.log(sigmoid(x)) + T.reshape(T.sum(T.log(sigmoid(-sample)), axis=1), (T.shape(x)[0],1))))
     
 def multi_cosine(x):
-    numerator = T.dot(x,T.transpose(x))
+    #numerator = T.dot(x,T.transpose(x))
     square_sum = T.sum(x**2,axis=1)
     denominator = T.sqrt(square_sum * T.transpose(T.tile(square_sum, (T.shape(x)[0],1))))                                                                                    
-    cosine = T.tril(numerator/denominator,k=-1) 
+    #cosine = T.tril(numerator/denominator,k=-1)
+    cosine = denominator
     return T.sum(cosine)
     
 def cosine(x,y):
