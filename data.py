@@ -12,6 +12,7 @@ import pickle
 import numpy as np
 from numpy.random import shuffle
 
+from nltk.corpus.reader import BracketParseCorpusReader as bpcr
 from nltk.corpus import treebank
 from nltk.stem import WordNetLemmatizer
 wn_lemmatizer = WordNetLemmatizer()
@@ -91,12 +92,14 @@ def load_data(set_data, max_context, max_polisemy, batch_size=None):
     '''
     Create target, context and sense sets
     '''
+    set_targets_idx = []
     set_targets = []
     set_contexts = []
     set_context_mask = []
     set_senses = []
     set_senses_mask = []
     set_indexes = []
+    batch_targets_idx = []
     batch_targets = []
     batch_contexts = []
     batch_context_mask = []
@@ -108,10 +111,12 @@ def load_data(set_data, max_context, max_polisemy, batch_size=None):
         sent_indexes = []
         for t in range(0, len(sent[0])):
             if batch_size == None:
-                set_targets.append(sent[0][t])
+                set_targets_idx.append(sent[0][t])
+                set_targets.append(sent[1][t])
             else:
-                batch_targets.append(sent[0][t])
-            context = sent[1][t]
+                batch_targets_idx.append(sent[0][t])
+                batch_targets.append(sent[1][t])
+            context = sent[2][t]
             context_mask = list(np.ones(len(context), dtype='int64'))
             for c in range(len(context), max_context):
                 context.append(1)
@@ -122,7 +127,7 @@ def load_data(set_data, max_context, max_polisemy, batch_size=None):
             else:
                 batch_contexts.append(context)
                 batch_context_mask.append(context_mask)
-            senses = sent[2][t]
+            senses = sent[3][t]
             senses_mask = list(np.ones(len(senses), dtype='int64'))
             for s in range(len(senses), max_polisemy):
                 senses.append(list(np.ones(20, dtype='int64')))
@@ -143,12 +148,14 @@ def load_data(set_data, max_context, max_polisemy, batch_size=None):
                 sent_indexes = []
                 for i in range(len(batch_indexes), 20):
                     batch_indexes.append([0,0])
+                set_targets_idx.append(batch_targets_idx)
                 set_targets.append(batch_targets)
                 set_contexts.append(batch_contexts)
                 set_context_mask.append(batch_context_mask)
                 set_senses.append(batch_senses)
                 set_senses_mask.append(batch_senses_mask)
                 set_indexes.append(batch_indexes)
+                batch_targets_idx = []
                 batch_targets = []
                 batch_contexts = []
                 batch_context_mask = []
@@ -169,15 +176,14 @@ def load_data(set_data, max_context, max_polisemy, batch_size=None):
                 batch_indexes.append(idx)
 
 
-    return set_targets, set_contexts, set_context_mask, set_senses, set_senses_mask, set_indexes
+    return (set_targets_idx, set_targets, set_contexts, set_context_mask,
+            set_senses, set_senses_mask, set_indexes)
         
 
-def load_sets(dataset):
+def load_sets(dataset, test_size_perc = .1, valid_size_perc = .1):
     '''
     Create train, test and valid sets from dataset
     '''
-    test_size_perc = .1
-    valid_size_perc = .1
     #shuffle(dataset)
     test_last = int(len(dataset) * test_size_perc)
     valid_last = int(test_last + len(dataset) * valid_size_perc)
@@ -187,41 +193,71 @@ def load_sets(dataset):
 
     return train_set, valid_set, test_set
     
-    
-    
-def load_penn_treebank(wnkge, wndict):
+   
+def load_corpus(wnkge, wndict, corpus='treebank', vocab=[], lemma_inv=[]):
     '''
     Load Penn Treebank Corpus
     '''
-    vocab = []
-    vocab.append('$TARGET$')
-    lemma_inv = []
+    
+    if corpus == 'treebank':
+        corpus = treebank
+    elif corpus == 's3aw':
+        doclist = []
+        doclist.append("cl23.mrg")
+        doclist.append("wsj_1695.mrg")
+        doclist.append("wsj_1778.mrg")
+        corpus = bpcr('/home/egoitz/Data/Datasets/WSD/Senseval-3/EnglishAW/test/', doclist)
+    
+    new_vocab = True
+    if np.size(vocab) > 0:
+        new_vocab = False
+    if new_vocab:
+        vocab.append('$UNK$')
+        vocab.append('$TARGET$')
+    new_lemma_inv = True
+    if np.size(lemma_inv) > 0:
+        new_lemma_inv = False
     max_context = 0
     max_polisemy = 0
     dataset = []
-    for fileid in treebank.fileids():
-        for sent in treebank.tagged_sents(fileid):
+    d = -1
+    for fileid in corpus.fileids():
+        d += 1
+        s = -1
+        for sent in corpus.tagged_sents(fileid):
+            s += 1
+            t = -1
             sentence = []
             words = []
             target_words = []
             target_lemmas = []
+            target_ids = []
             for w in range(0,len(sent)):
-                word = sent[w]
-                if word[0] not in vocab:
-                    vocab.append(word[0])
-                words.append(vocab.index(word[0]))
-                if re.search(r'(^NN[^P]*$|^VB|^JJ|^RB)',word[1]):
-                    pos = re.sub(r'^NN.*','n',word[1])
+                t += 1
+                token = sent[w]
+                word = token[0]
+                if token[1] != '-NONE-':
+                    if word not in vocab:
+                        if not new_vocab:
+                            word = '$UNK$'
+                        else:
+                            vocab.append(word)
+                    words.append(vocab.index(word))
+                if re.search(r'(^NN[^P]*$|^VB|^JJ|^RB)',token[1]):
+                    pos = re.sub(r'^NN.*','n',token[1])
                     pos = re.sub(r'^VB.*','v',pos)
                     pos = re.sub(r'^JJ.*','a',pos)
                     pos = re.sub(r'^RB.*','r',pos)
-                    lemma = wn_lemmatizer.lemmatize(word[0],pos=pos) + '-' + pos
-                    if lemma in wndict:
+                    lemma = wn_lemmatizer.lemmatize(token[0],pos=pos) + '-' + pos
+                    if lemma in wndict and (lemma in lemma_inv or new_lemma_inv): # The lemma is in wordnet and in the lemma inventory ("test") or we are creating the lemma inventory ("trainig")
+                        tid = "d%03i.s%03i.t%03i" % (d,s,t)
+                        target_ids.append(tid)
                         target_words.append(w)
                         if lemma not in lemma_inv:
                             lemma_inv.append(lemma)
                         target_lemmas.append(lemma)
-                                      
+                        
+            ids = []
             targets=[]
             contexts=[]
             senses=[]
@@ -237,6 +273,7 @@ def load_penn_treebank(wnkge, wndict):
                 for sense in wndict[target_lemmas[tw]]:
                     if sense in wnkge:
                         word_senses.append(wnkge[sense])
+                ids.append(target_ids[tw])
                 targets.append(lemma_inv.index(target_lemmas[tw]))
                 contexts.append(context)
                 senses.append(word_senses)
@@ -244,6 +281,7 @@ def load_penn_treebank(wnkge, wndict):
                     max_context = len(context)
                 if len(word_senses) > max_polisemy:
                     max_polisemy = len(word_senses)
+            sentence.append(ids)
             sentence.append(targets)
             sentence.append(contexts)
             sentence.append(senses)

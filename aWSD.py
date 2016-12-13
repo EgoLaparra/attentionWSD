@@ -8,6 +8,7 @@ Created on Sun Nov 20 12:54:45 2016
 import sys
 sys.path.append('/home/egoitz/Tools/embeddings/kge/SME/')
 import pickle
+import tempfile
 
 import numpy as np
 from numpy import random
@@ -16,6 +17,7 @@ from theano import tensor as T
 
 import data
 import net as M 
+import score
        
 epochs=1
 batch_size = 100
@@ -25,17 +27,17 @@ if  (sys.argv[1] == "t"):
     # LOAD DATA
     print ('Loading data...')
     wnkge, wndict = data.load_kge()            
-    vocab, lemma_inv, max_context, max_polisemy, dataset = data.load_penn_treebank(wnkge, wndict)
+    vocab, lemma_inv, max_context, max_polisemy, dataset = data.load_corpus(wnkge, wndict)
     vocab_size = len(vocab)
     lemma_inv_size = len(lemma_inv)    
     train_set, valid_set, test_set = data.load_sets(dataset)
-    (train_targets, train_contexts, train_context_mask,
+    (train_targets_idx, train_targets, train_contexts, train_context_mask,
      train_senses, train_senses_mask, train_indexes) = data.load_data(train_set, max_context,
                                                                         max_polisemy, batch_size=batch_size)
     batches = len(train_targets)
-    (valid_targets, valid_contexts, valid_context_mask,
+    (valid_targets_idx, valid_targets, valid_contexts, valid_context_mask,
      valid_senses, valid_senses_mask, valid_indexes) = data.load_data(valid_set, max_context, max_polisemy)
-    (test_targets, test_contexts, test_context_mask,
+    (test_targets_idx, test_targets, test_contexts, test_context_mask,
      test_senses, test_senses_mask, test_indexes) = data.load_data(test_set, max_context, max_polisemy)
      
     x_targets = T.vector('x_targets',dtype='int64') # batch_size
@@ -134,23 +136,7 @@ if  (sys.argv[1] == "t"):
     for param in model.params:
         pickle.dump(param.get_value(), f)
     f.close()
-elif  (sys.argv[1] == "p"):
-    # LOAD DATA
-    print ('Loading data...')
-    wnkge, wndict = data.load_kge()            
-    vocab, lemma_inv, max_context, max_polisemy, dataset = data.load_penn_treebank(wnkge, wndict)
-    vocab_size = len(vocab)
-    lemma_inv_size = len(lemma_inv)    
-    train_set, valid_set, test_set = data.load_sets(dataset)
-    (train_targets, train_contexts, train_context_mask,
-     train_senses, train_senses_mask, train_indexes) = data.load_data(train_set, max_context,
-                                                                        max_polisemy, batch_size=batch_size)
-    batches = len(train_targets)
-    (valid_targets, valid_contexts, valid_context_mask,
-     valid_senses, valid_senses_mask, valid_indexes) = data.load_data(valid_set, max_context, max_polisemy)
-    (test_targets, test_contexts, test_context_mask,
-     test_senses, test_senses_mask, test_indexes) = data.load_data(test_set, max_context, max_polisemy)
-    
+elif  (sys.argv[1] == "p" or sys.argv[1] == "e"):   
     # LOAD THE MODEL
     print ('Loading the model...')
     f = open('model.pkl', 'rb')
@@ -169,6 +155,15 @@ elif  (sys.argv[1] == "p"):
     for param in model.params:
         param.set_value(pickle.load(f))    
     f.close()    
+
+    # LOAD DATA
+    print ('Loading data...')
+    wnkge, wndict = data.load_kge()            
+    (_, _, max_context, max_polisemy, dataset) = data.load_corpus(wnkge, wndict, corpus='s3aw', 
+                                                                    vocab=vocab, lemma_inv=lemma_inv)    
+    test_set, _, _ = data.load_sets(dataset, 0, 0)
+    (test_targets_idx, test_targets, test_contexts, test_context_mask,
+     test_senses, test_senses_mask, test_indexes) = data.load_data(test_set, max_context, max_polisemy)
     
     # COMPILE NET
     print ('Compiling...')
@@ -181,12 +176,25 @@ elif  (sys.argv[1] == "p"):
     prediction = predict(test_targets, test_contexts, test_context_mask,
                           test_senses, test_senses_mask)        
 
+    print ('Parsing...')
+    if (sys.argv[1] == "e"):
+        tmpout = tempfile.NamedTemporaryFile(delete=False)
     for t in range(0,len(prediction[0])):
+        idx = test_targets_idx[t]
         lemma = lemma_inv[test_targets[t]]
         senses = np.array(test_senses[t])
         numerator = np.sum(prediction[0][t] * senses, axis=1)
         denominator = np.sqrt(np.sum(prediction[0][t]**2) * np.sum(senses**2, axis=1))
         cosine = numerator/denominator
         max_sense = np.argmax(cosine)
-        print (lemma + " " + wndict[lemma][max_sense])
-        
+        if max_sense < np.size(wndict[lemma]):
+            if (sys.argv[1] == "e"):
+                tmpout.write(idx + " " + wndict[lemma][max_sense] + " !! " + lemma + '\n')
+            else:
+                print (idx + " " + wndict[lemma][max_sense] + " !! " + lemma)
+    tmpout.close()
+    
+    print ('Runing scorer...')
+    if sys.argv[1] == "e":
+        tmpedited = score.edit_output(tmpout)
+        score.run_scorer(tmpedited)
