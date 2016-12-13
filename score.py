@@ -8,9 +8,9 @@ import os
 import re
 import tempfile
 
-def edit_output (tmpoutput):
+def edit_output (config, tmpoutput):
     sense_dict = {}
-    wn_file = open('/home/egoitz/Data/Resources/WordNet/WordNet-3.0/dict/index.sense','r')
+    wn_file = open(config.get('Evaluation','senses'),'r')
     for line in wn_file:
         fields = line.rstrip().split()
         sensekey = fields[0]
@@ -56,7 +56,7 @@ def edit_output (tmpoutput):
     return tmpedited
 
     
-def run_scorer (tmpedited):
-    scorer = '/home/egoitz/Data/Datasets/WSD/Senseval-3/scorer2'
-    gs = '/home/egoitz/Data/Datasets/WSD/Senseval-3/EnglishAW/test/EnglishAW.test.key'
+def run_scorer (config, tmpedited):
+    scorer = config.get('Evaluation','scorer')
+    gs = config.get('Evaluation','gs')
     os.system(scorer + ' ' + tmpedited.name + ' ' + gs)

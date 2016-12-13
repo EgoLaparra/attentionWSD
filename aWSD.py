@@ -6,9 +6,10 @@ Created on Sun Nov 20 12:54:45 2016
 @author: egoitz
 """
 import sys
-sys.path.append('/home/egoitz/Tools/embeddings/kge/SME/')
 import pickle
 import tempfile
+import ConfigParser
+
 
 import numpy as np
 from numpy import random
@@ -18,6 +19,10 @@ from theano import tensor as T
 import data
 import net as M 
 import score
+
+config = ConfigParser.ConfigParser()
+config.read('run.cfg')
+sys.path.append(config.get('KGE','path'))
        
 epochs=1
 batch_size = 100
@@ -26,8 +31,8 @@ rng = random.RandomState(12345)
 if  (sys.argv[1] == "t"):
     # LOAD DATA
     print ('Loading data...')
-    wnkge, wndict = data.load_kge()            
-    vocab, lemma_inv, max_context, max_polisemy, dataset = data.load_corpus(wnkge, wndict)
+    wnkge, wndict = data.load_kge(config)            
+    vocab, lemma_inv, max_context, max_polisemy, dataset = data.load_corpus(config, wnkge, wndict)
     vocab_size = len(vocab)
     lemma_inv_size = len(lemma_inv)    
     train_set, valid_set, test_set = data.load_sets(dataset)
@@ -158,8 +163,8 @@ elif  (sys.argv[1] == "p" or sys.argv[1] == "e"):
 
     # LOAD DATA
     print ('Loading data...')
-    wnkge, wndict = data.load_kge()            
-    (_, _, max_context, max_polisemy, dataset) = data.load_corpus(wnkge, wndict, corpus='s3aw', 
+    wnkge, wndict = data.load_kge(config)            
+    (_, _, max_context, max_polisemy, dataset) = data.load_corpus(config, wnkge, wndict, corpus='s3aw', 
                                                                     vocab=vocab, lemma_inv=lemma_inv)    
     test_set, _, _ = data.load_sets(dataset, 0, 0)
     (test_targets_idx, test_targets, test_contexts, test_context_mask,
@@ -196,5 +201,5 @@ elif  (sys.argv[1] == "p" or sys.argv[1] == "e"):
     
     print ('Runing scorer...')
     if sys.argv[1] == "e":
-        tmpedited = score.edit_output(tmpout)
-        score.run_scorer(tmpedited)
+        tmpedited = score.edit_output(config, tmpout)
+        score.run_scorer(config, tmpedited)

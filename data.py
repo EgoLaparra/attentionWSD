@@ -194,7 +194,7 @@ def load_sets(dataset, test_size_perc = .1, valid_size_perc = .1):
     return train_set, valid_set, test_set
     
    
-def load_corpus(wnkge, wndict, corpus='treebank', vocab=[], lemma_inv=[]):
+def load_corpus(config, wnkge, wndict, corpus='treebank', vocab=[], lemma_inv=[]):
     '''
     Load Penn Treebank Corpus
     '''
@@ -203,10 +203,9 @@ def load_corpus(wnkge, wndict, corpus='treebank', vocab=[], lemma_inv=[]):
         corpus = treebank
     elif corpus == 's3aw':
         doclist = []
-        doclist.append("cl23.mrg")
-        doclist.append("wsj_1695.mrg")
-        doclist.append("wsj_1778.mrg")
-        corpus = bpcr('/home/egoitz/Data/Datasets/WSD/Senseval-3/EnglishAW/test/', doclist)
+        for doc in config.get('Senseval','files').split(','):
+            doclist.append(doc)
+        corpus = bpcr(config.get('Senseval','path'), doclist)
     
     new_vocab = True
     if np.size(vocab) > 0:
@@ -319,11 +318,11 @@ def load_corpus(wnkge, wndict, corpus='treebank', vocab=[], lemma_inv=[]):
 #        
 #    return wn_kge, wn_dict
 
-def load_kge ():
+def load_kge (config):
     '''
     Load Knowledge Graph Embeddings
     '''    
-    s2c = open('/home/egoitz/Data/GenResources/KGE/SME/wn30/wn30.senses', 'r')
+    s2c = open(config.get('KGE','senses'), 'r')
     wn_dict = dict()
     for line in s2c:
         fields = line.rstrip().split()
@@ -334,9 +333,9 @@ def load_kge ():
             wn_dict[c].append(s)
     s2c.close()
     
-    f = open('/home/egoitz/Data/GenResources/KGE/SME/WN30_TransE/data/WN_synset2idx.pkl', 'rb')
+    f = open(config.get('KGE','s2i'), 'rb')
     s2i = pickle.load(f)
-    f = open('/home/egoitz/Data/GenResources/KGE/SME/WN30_TransE/WN_TransE/best_valid_model.pkl', 'rb') 
+    f = open(config.get('KGE','model'), 'rb') 
     m= pickle.load(f)
     kge = zip(*m[0].E.get_value())    
     wn_kge = dict()
