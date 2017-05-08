@@ -10,24 +10,28 @@ import pickle
 import tempfile
 import ConfigParser
 
-
 import numpy as np
 from numpy import random
 import theano
 from theano import tensor as T
 
+import sklearn.manifold as mnf
+from matplotlib import pyplot as plt
+
 import data
 import net as M 
 import score
 
+np.set_printoptions(threshold=np.nan)
+
 config = ConfigParser.ConfigParser()
 config.read('run.cfg')
 sys.path.append(config.get('KGE','path'))
-       
+
 epochs=1
 batch_size = 100
-rng = random.RandomState(12345)        
-        
+rng = random.RandomState(12345)
+
 if  (sys.argv[1] == "t"):
     # LOAD DATA
     print ('Loading data...')
@@ -36,6 +40,7 @@ if  (sys.argv[1] == "t"):
     vocab_size = len(vocab)
     lemma_inv_size = len(lemma_inv)    
     train_set, valid_set, test_set = data.load_sets(dataset)
+        
     (train_targets_idx, train_targets, train_contexts, train_context_mask,
      train_senses, train_senses_mask, train_indexes) = data.load_data(train_set, max_context,
                                                                         max_polisemy, batch_size=batch_size)
@@ -44,7 +49,23 @@ if  (sys.argv[1] == "t"):
      valid_senses, valid_senses_mask, valid_indexes) = data.load_data(valid_set, max_context, max_polisemy)
     (test_targets_idx, test_targets, test_contexts, test_context_mask,
      test_senses, test_senses_mask, test_indexes) = data.load_data(test_set, max_context, max_polisemy)
-     
+
+#    toreduct = []
+#    for k in wnkge.keys():
+#        toreduct.append(wnkge[k])
+#        
+#    drmodel = mnf.TSNE(n_components=2, random_state=0)
+#    #drmodel = mnf.SpectralEmbedding(n_components=2, random_state=0)
+#    samples = np.random.choice(range(0,len(toreduct)),5000)
+#    reduct = drmodel.fit_transform(np.array(toreduct)[samples])
+#    plt.scatter(reduct[1:-1,0],reduct[1:-1,1],color='blue')
+#    plt.scatter(reduct[0,0],reduct[0,1],color='red')
+#    plt.scatter(reduct[-1,0],reduct[-1,1],color='red')
+#    plt.annotate("firs",(reduct[0,0],reduct[0,1]))
+#    plt.annotate("last",(reduct[-1,0],reduct[-1,1]))
+#    plt.show()
+#    sys.exit()
+    
     x_targets = T.vector('x_targets',dtype='int64') # batch_size
     x_contexts = T.matrix('x_contexts',dtype='int64')  # batch_size X num_words
     x_context_mask = T.matrix('x_context_mask',dtype='int64')  # batch_size X num_words
@@ -60,7 +81,8 @@ if  (sys.argv[1] == "t"):
     train = theano.function(
                             inputs=[x_targets, x_contexts, x_context_mask, 
                                     x_senses, x_senses_mask, x_indexes],
-                            outputs=[model.top.output,model.loss],
+                            #outputs=[model.top.output,model.loss],
+                            outputs=[model.top.output,model.to_print1,model.loss],
                             updates=model.updates,
                             )
 
@@ -86,10 +108,12 @@ if  (sys.argv[1] == "t"):
             batch_senses = train_senses[b]
             batch_senses_mask = train_senses_mask[b]
             batch_indexes = train_indexes[b]
-
-            out, loss = train(batch_targets, batch_contexts, batch_context_mask,
+            
+            out, pr1, loss = train(batch_targets, batch_contexts, batch_context_mask,
                               batch_senses, batch_senses_mask, batch_indexes)
             
+            #if b == 0:
+            #    print (np.argmax(pr1,axis=2))
             
             loss = loss / batch_size
             count =  count + 1;
@@ -111,8 +135,8 @@ if  (sys.argv[1] == "t"):
                                        valid_senses, valid_senses_mask, valid_indexes)
                 valid_loss = valid_loss / valid_size
                 print (' Validation COSINE %.3f' % valid_loss)
+        print ('')
     
-    print ('')
     print ('Finished Training.')
     print ('Final Training COSINE %.3f\n' % train_loss);
     
@@ -175,31 +199,35 @@ elif  (sys.argv[1] == "p" or sys.argv[1] == "e"):
     predict = theano.function(
                           inputs=[x_targets, x_contexts, x_context_mask, 
                                   x_senses, x_senses_mask],
-                          outputs=[model.top.output]
+                          outputs=[model.top.output, model.top.relevance]
+                          #outputs=model.top.output
                           )
     
-    prediction = predict(test_targets, test_contexts, test_context_mask,
+    prediction, probs = predict(test_targets, test_contexts, test_context_mask,
+#    prediction = predict(test_targets, test_contexts, test_context_mask,
                           test_senses, test_senses_mask)        
 
     print ('Parsing...')
     if (sys.argv[1] == "e"):
         tmpout = tempfile.NamedTemporaryFile(delete=False)
-    for t in range(0,len(prediction[0])):
+    for t in range(0,len(prediction)):
         idx = test_targets_idx[t]
         lemma = lemma_inv[test_targets[t]]
         senses = np.array(test_senses[t])
-        numerator = np.sum(prediction[0][t] * senses, axis=1)
-        denominator = np.sqrt(np.sum(prediction[0][t]**2) * np.sum(senses**2, axis=1))
+        numerator = np.sum(prediction[t] * senses, axis=1)
+        denominator = np.sqrt(np.sum(prediction[t]**2) * np.sum(senses**2, axis=1))
         cosine = numerator/denominator
         max_sense = np.argmax(cosine)
         if max_sense < np.size(wndict[lemma]):
             if (sys.argv[1] == "e"):
                 tmpout.write(idx + " " + wndict[lemma][max_sense] + " !! " + lemma + '\n')
             else:
-                print (idx + " " + wndict[lemma][max_sense] + " !! " + lemma)
-    tmpout.close()
+                #print (idx + " " + wndict[lemma][max_sense] + " !! " + lemma)
+                if lemma == 'homeless-a':
+                    print (idx, lemma, senses, probs[t])
     
-    print ('Runing scorer...')
     if sys.argv[1] == "e":
+        tmpout.close()
+        print ('Runing scorer...')
         tmpedited = score.edit_output(config, tmpout)
         score.run_scorer(config, tmpedited)

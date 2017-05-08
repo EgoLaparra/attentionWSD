@@ -116,7 +116,7 @@ def load_data(set_data, max_context, max_polisemy, batch_size=None):
             else:
                 batch_targets_idx.append(sent[0][t])
                 batch_targets.append(sent[1][t])
-            context = sent[2][t]
+            context = list(sent[2][t])
             context_mask = list(np.ones(len(context), dtype='int64'))
             for c in range(len(context), max_context):
                 context.append(1)
@@ -127,7 +127,7 @@ def load_data(set_data, max_context, max_polisemy, batch_size=None):
             else:
                 batch_contexts.append(context)
                 batch_context_mask.append(context_mask)
-            senses = sent[3][t]
+            senses = list(sent[3][t])
             senses_mask = list(np.ones(len(senses), dtype='int64'))
             for s in range(len(senses), max_polisemy):
                 senses.append(list(np.ones(20, dtype='int64')))
@@ -138,7 +138,7 @@ def load_data(set_data, max_context, max_polisemy, batch_size=None):
             else:
                 batch_senses.append(senses)
                 batch_senses_mask.append(senses_mask)
-            case_index += 1
+                case_index += 1
             sent_indexes.append(case_index)            
             if batch_size != None and len(batch_targets) == batch_size:
                 idx = []
@@ -191,6 +191,8 @@ def load_sets(dataset, test_size_perc = .1, valid_size_perc = .1):
     valid_set = dataset[test_last:valid_last]
     train_set = dataset[valid_last:]
 
+    #train_set = [list(train_set[0]) for i in range(0,2000)]
+                     
     return train_set, valid_set, test_set
     
    
@@ -321,18 +323,7 @@ def load_corpus(config, wnkge, wndict, corpus='treebank', vocab=[], lemma_inv=[]
 def load_kge (config):
     '''
     Load Knowledge Graph Embeddings
-    '''    
-    s2c = open(config.get('KGE','senses'), 'r')
-    wn_dict = dict()
-    for line in s2c:
-        fields = line.rstrip().split()
-        c = fields[0]
-        for s in fields[1:]:
-            if c not in wn_dict:
-                wn_dict[c] = list()
-            wn_dict[c].append(s)
-    s2c.close()
-    
+    '''       
     f = open(config.get('KGE','s2i'), 'rb')
     s2i = pickle.load(f)
     f = open(config.get('KGE','model'), 'rb') 
@@ -344,4 +335,17 @@ def load_kge (config):
         wn_kge[s] = kge[i]
     f.close()
     
+    s2c = open(config.get('KGE','senses'), 'r')
+    wn_dict = dict()
+    for line in s2c:
+        fields = line.rstrip().split()
+        c = fields[0]
+        slist = list()
+        for s in fields[1:]:
+            if s in wn_kge:
+                slist.append(s)
+        if len(slist) > 0:
+            wn_dict[c] = slist
+    s2c.close()
+
     return wn_kge, wn_dict

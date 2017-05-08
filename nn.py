@@ -872,19 +872,24 @@ class Attention:
         
         def recurrence(query_t, info_t, info_mask_t):
             aggregation_t = T.dot(info_t, query_t) / T.sqrt(T.sum(info_t * info_t, axis=1) * T.dot(query_t, query_t))
+            aggregation_t = aggregation_t * info_mask_t
             #aggregation_t = T.dot(info_t, query_t)
+            aggregation_t = T.where(T.neq(aggregation_t,0),aggregation_t,-np.inf)
             relevance_t = T.nnet.softmax(aggregation_t)
-            info_mask_t = T.transpose(T.tile(info_mask_t, (T.shape(info_t)[1],1)))
-            output_t = T.sum(relevance_t * T.transpose(info_mask_t * info_t), axis=1)
-            return output_t
+            #info_mask_t = T.transpose(T.tile(info_mask_t, (T.shape(info_t)[1],1)))
+            #output_t = T.sum(relevance_t * T.transpose(info_mask_t * info_t), axis=1)
+            output_t = T.sum(relevance_t * T.transpose(info_t), axis=1)
+            return [output_t, relevance_t]
                 
-        output, _ = theano.scan(
+        [output, relevance], _ = theano.scan(
                                 fn=recurrence,
                                 sequences=[query, info, info_mask],
-                                outputs_info=None,
+                                outputs_info=[None,None],
                                 )
         
         self.output = output
+        
+        self.relevance = relevance
         
         self.query = query
         self.info = info

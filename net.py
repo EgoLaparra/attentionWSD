@@ -25,13 +25,18 @@ class Model():
         # MODEL
         self.ctx_emb = nn.Embedding(rng, contexts, vocab_size, ctx_emb_units, sequence=True) # output: num_words X batch_size x ctx_emb_size
         self.lstm = nn.LSTM(rng, self.ctx_emb.output, ctx_emb_units, tgt_emb_units, input_mask=T.transpose(context_mask), batch_size=bs) # output: batch_size x tgt_emb_size
-        self.tgt_emb = nn.Embedding(rng, targets, lemma_inv_size, tgt_emb_units, batch_size=bs) # output: batch_size x tgt_emb_size
-        self.query = nn.Combine([self.lstm.output, self.tgt_emb.output], op='mean') # output: batch_size x tgt_emb_size 
-        self.top = nn.Attention(self.query.output, senses, info_mask=senses_mask) # output: batch_size x kge_emb_size 
+        #self.tgt_emb = nn.Embedding(rng, targets, lemma_inv_size, tgt_emb_units, batch_size=bs) # output: batch_size x tgt_emb_size
+        #self.query = nn.Combine([self.lstm.output, self.tgt_emb.output], op='mean') # output: batch_size x tgt_emb_size 
+        #self.top = nn.Attention(self.query.output, senses, info_mask=senses_mask) # output: batch_size x kge_emb_size 
+        
+        self.top = nn.Attention(self.lstm.output, senses, info_mask=senses_mask) # output: batch_size x kge_emb_size 
 
         # PARAMETERS TO BE LEARNT
-        self.params = self.ctx_emb.params + self.lstm.params + self.tgt_emb.params
-        self.deltas = self.ctx_emb.deltas + self.lstm.deltas + self.tgt_emb.deltas
+        #self.params = self.ctx_emb.params + self.lstm.params + self.tgt_emb.params
+        #self.deltas = self.ctx_emb.deltas + self.lstm.deltas + self.tgt_emb.deltas
+        
+        self.params = self.ctx_emb.params + self.lstm.params
+        self.deltas = self.ctx_emb.deltas + self.lstm.deltas
         
         # LOSS FUNCTION, COSINE SIMILARITY
         def sentence_cosine(indexes, output):
@@ -41,10 +46,14 @@ class Model():
                                        zero,
                                        functions.multi_cosine(output[indexes[0]:indexes[1]]))
             return cosine
+               
         cosines, _ = theano.scan(fn=sentence_cosine,
                               outputs_info=None,
                               sequences=[case_indexes],
                               non_sequences=self.top.output)
+
+        self.to_print1 = self.top.relevance
+        
         self.loss = -T.sum(cosines)
 
         # BACK-PROPAGATION, GET GRADIENTS
